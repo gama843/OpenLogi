@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-08-19
+
+### Added
+
+- *(ipc)* identify each agent run behind a frozen handshake
+
+### Changed
+
+- *(gui)* stop scanning for cameras with no window open
+
+### Fixed
+
+- *(agent)* supervise the overlay role instead of launching into it
+- *(gui)* bind the Actions Ring overlay to one agent run
+- *(agent)* reapply volatile settings after Windows resume ([#639](https://github.com/AprilNEA/OpenLogi/pull/639))
+
 ## [0.7.1] - 2026-08-15
 
 ### Added
