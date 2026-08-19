@@ -1,6 +1,6 @@
 //! A platform-neutral synthesis IR.
 //!
-//! [`Action`] has one variant per user-facing behaviour (52 of them), but the
+//! [`Action`] has one variant per user-facing behaviour (54 of them), but the
 //! three `openlogi-inject` backends don't care about most of that
 //! granularity — they care about *mechanism*: "press this chord", "click
 //! this mouse button", "fire this media key", "there is no portable way to
@@ -58,8 +58,8 @@ pub enum Effect<'a> {
     /// Type this text via unicode input.
     Text(&'a str),
     /// Handled entirely by the agent/hook layer — DPI presets, SmartShift,
-    /// the Actions Ring, and launching an application. The injector logs
-    /// and does nothing.
+    /// the Actions Ring, thumb-wheel magnification, and launching an application.
+    /// The injector logs and does nothing.
     ///
     /// [`Action::OpenApplication`] is included here even though
     /// `openlogi_inject::execute` does open it: that happens in the
@@ -256,13 +256,16 @@ impl Action {
             Action::VolumeDown => Effect::Media(MediaKey::VolumeDown),
             Action::MuteVolume => Effect::Media(MediaKey::Mute),
 
-            // DPI/SmartShift/the Actions Ring/OpenApplication are all handled
-            // above (or beside) the injector — see `Effect::AgentSide`.
+            // DPI/SmartShift/the Actions Ring/OpenApplication and thumb-wheel
+            // zoom are handled above (or beside) the injector — see
+            // `Effect::AgentSide`.
             Action::CycleDpiPresets
             | Action::SetDpiPreset(_)
             | Action::ToggleSmartShift
             | Action::ShowActionsRing
-            | Action::OpenApplication(_) => Effect::AgentSide,
+            | Action::OpenApplication(_)
+            | Action::ZoomOut
+            | Action::ZoomIn => Effect::AgentSide,
 
             Action::ScrollUp => Effect::Scroll { dx: 0, dy: 1 },
             Action::ScrollDown => Effect::Scroll { dx: 0, dy: -1 },
