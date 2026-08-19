@@ -25,12 +25,13 @@ pub(crate) enum ThumbwheelPreset {
     Volume,
     VolumeReversed,
     CycleDpi,
+    Zoom,
     VerticalScroll,
     HorizontalScroll,
 }
 
 impl ThumbwheelPreset {
-    pub(crate) const ALL: [Self; 11] = [
+    pub(crate) const ALL: [Self; 12] = [
         Self::BackForward,
         Self::UndoRedo,
         Self::BrowserHistory,
@@ -40,6 +41,7 @@ impl ThumbwheelPreset {
         Self::Volume,
         Self::VolumeReversed,
         Self::CycleDpi,
+        Self::Zoom,
         Self::VerticalScroll,
         Self::HorizontalScroll,
     ];
@@ -56,6 +58,7 @@ impl ThumbwheelPreset {
             Self::Volume => (Action::VolumeDown, Action::VolumeUp),
             Self::VolumeReversed => (Action::VolumeUp, Action::VolumeDown),
             Self::CycleDpi => (Action::CycleDpiPresets, Action::CycleDpiPresets),
+            Self::Zoom => (Action::ZoomOut, Action::ZoomIn),
             Self::VerticalScroll => (Action::ScrollDown, Action::ScrollUp),
             Self::HorizontalScroll => (Action::HorizontalScrollLeft, Action::HorizontalScrollRight),
         };
@@ -84,6 +87,7 @@ impl ThumbwheelPreset {
             Self::Volume => "Volume Down / Up",
             Self::VolumeReversed => "Volume Up / Down",
             Self::CycleDpi => "Cycle DPI Presets",
+            Self::Zoom => "Zoom",
             Self::VerticalScroll => "Vertical Scroll",
             Self::HorizontalScroll => "Horizontal Scroll",
         }
@@ -100,6 +104,7 @@ impl ThumbwheelPreset {
             Self::Tracks => "action-icons/skip-forward.svg",
             Self::Volume | Self::VolumeReversed => "action-icons/volume-2.svg",
             Self::CycleDpi => "action-icons/gauge.svg",
+            Self::Zoom => "action-icons/search.svg",
             Self::VerticalScroll => "action-icons/chevrons-up.svg",
             Self::HorizontalScroll => "action-icons/chevrons-right.svg",
         }
@@ -122,6 +127,7 @@ mod tests {
             (Action::VolumeDown, Action::VolumeUp),
             (Action::VolumeUp, Action::VolumeDown),
             (Action::CycleDpiPresets, Action::CycleDpiPresets),
+            (Action::ZoomOut, Action::ZoomIn),
             (Action::ScrollDown, Action::ScrollUp),
             (Action::HorizontalScrollLeft, Action::HorizontalScrollRight),
         ];
