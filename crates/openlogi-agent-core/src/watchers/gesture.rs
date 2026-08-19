@@ -64,8 +64,7 @@ fn scroll_multiplier(sensitivity: i32) -> f32 {
 /// Fractional native magnification emitted for one raw rotation increment.
 /// Uses the same linear sensitivity scale as horizontal thumb-wheel scrolling.
 fn magnification_per_increment(sensitivity: i32) -> f64 {
-    f64::from(sensitivity) / f64::from(DEFAULT_THUMBWHEEL_SENSITIVITY)
-        * MAGNIFICATION_PER_INCREMENT
+    f64::from(sensitivity) / f64::from(DEFAULT_THUMBWHEEL_SENSITIVITY) * MAGNIFICATION_PER_INCREMENT
 }
 
 /// Rotation increments required to fire a custom (non-scroll) wheel action.
@@ -454,9 +453,7 @@ fn dispatch(
                 } else {
                     -1.0
                 };
-                let amount = sign
-                    * f64::from(magnitude)
-                    * magnification_per_increment(sensitivity);
+                let amount = sign * f64::from(magnitude) * magnification_per_increment(sensitivity);
                 debug!(key, ?button, amount, "thumb wheel → native magnification");
                 openlogi_inject::post_magnification(amount);
                 return;
@@ -562,9 +559,7 @@ mod tests {
             (magnification_per_increment(DEFAULT_THUMBWHEEL_SENSITIVITY) - 0.01).abs()
                 < f64::EPSILON
         );
-        assert!(
-            magnification_per_increment(DEFAULT_THUMBWHEEL_SENSITIVITY * 2) > 0.019
-        );
+        assert!(magnification_per_increment(DEFAULT_THUMBWHEEL_SENSITIVITY * 2) > 0.019);
     }
 
     #[test]
