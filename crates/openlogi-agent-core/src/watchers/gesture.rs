@@ -10,8 +10,8 @@
 //! - a DPI/ModeShift or thumb-wheel-tap press through the button binding map,
 //! - thumb-wheel rotation through the [`ButtonId::ThumbwheelScrollUp`] /
 //!   [`ButtonId::ThumbwheelScrollDown`] bindings — either re-synthesised as
-//!   continuous, sensitivity-scaled horizontal scroll or accumulated into a
-//!   custom action,
+//!   native magnification, continuous sensitivity-scaled horizontal scroll, or
+//!   accumulated into a custom action,
 //!
 //! all via the common action path ([`crate::hook_runtime::dispatch_action`]).
 //!
@@ -48,6 +48,9 @@ const ACTION_DECAY: Duration = Duration::from_millis(300);
 /// deliberate flick triggers once instead of repeating across a fast spin.
 const ACTION_COOLDOWN: Duration = Duration::from_millis(200);
 
+/// One raw thumb-wheel increment at default sensitivity changes scale by 1%.
+const MAGNIFICATION_PER_INCREMENT: f64 = 0.01;
+
 /// Speed multiplier for the wheel's continuous horizontal scroll. The default
 /// sensitivity is 1×; the scale is linear around it.
 #[allow(
@@ -56,6 +59,13 @@ const ACTION_COOLDOWN: Duration = Duration::from_millis(200);
 )]
 fn scroll_multiplier(sensitivity: i32) -> f32 {
     sensitivity as f32 / DEFAULT_THUMBWHEEL_SENSITIVITY as f32
+}
+
+/// Fractional native magnification emitted for one raw rotation increment.
+/// Uses the same linear sensitivity scale as horizontal thumb-wheel scrolling.
+fn magnification_per_increment(sensitivity: i32) -> f64 {
+    f64::from(sensitivity) / f64::from(DEFAULT_THUMBWHEEL_SENSITIVITY)
+        * MAGNIFICATION_PER_INCREMENT
 }
 
 /// Rotation increments required to fire a custom (non-scroll) wheel action.
@@ -433,9 +443,27 @@ fn dispatch(
                 .cloned()
                 .unwrap_or_else(|| default_binding(button));
             let sensitivity = plan.thumbwheel_sensitivity;
+            let magnitude = i32::from(rotation).abs();
+            if magnitude == 0 {
+                return;
+            }
+
+            if matches!(action, Action::ZoomOut | Action::ZoomIn) {
+                let sign = if matches!(action, Action::ZoomIn) {
+                    1.0
+                } else {
+                    -1.0
+                };
+                let amount = sign
+                    * f64::from(magnitude)
+                    * magnification_per_increment(sensitivity);
+                debug!(key, ?button, amount, "thumb wheel → native magnification");
+                openlogi_inject::post_magnification(amount);
+                return;
+            }
+
             let wheels = accumulators.entry(key.to_owned()).or_default();
             let dir = if up { &mut wheels.up } else { &mut wheels.down };
-            let magnitude = i32::from(rotation).abs();
             match advance(dir, &action, magnitude, sensitivity, Instant::now()) {
                 WheelOutput::Idle => {}
                 WheelOutput::Scroll(lines) => {
@@ -526,6 +554,17 @@ mod tests {
         assert!((scroll_multiplier(DEFAULT_THUMBWHEEL_SENSITIVITY) - 1.0).abs() < f32::EPSILON);
         assert!(scroll_multiplier(DEFAULT_THUMBWHEEL_SENSITIVITY * 2) > 1.9);
         assert!(scroll_multiplier(1) < 0.1);
+    }
+
+    #[test]
+    fn magnification_is_one_percent_per_increment_at_default_sensitivity() {
+        assert!(
+            (magnification_per_increment(DEFAULT_THUMBWHEEL_SENSITIVITY) - 0.01).abs()
+                < f64::EPSILON
+        );
+        assert!(
+            magnification_per_increment(DEFAULT_THUMBWHEEL_SENSITIVITY * 2) > 0.019
+        );
     }
 
     #[test]
