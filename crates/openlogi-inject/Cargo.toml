@@ -30,6 +30,7 @@ zbus = "5"
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = { version = "0.25.0", features = ["highsierra"] }
 core-foundation = { workspace = true }
+libc = "0.2"
 objc2 = { workspace = true }
 objc2-app-kit = { workspace = true, features = [
   "NSEvent",
