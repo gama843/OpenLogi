@@ -58,7 +58,10 @@ impl ThumbwheelPreset {
             Self::Volume => (Action::VolumeDown, Action::VolumeUp),
             Self::VolumeReversed => (Action::VolumeUp, Action::VolumeDown),
             Self::CycleDpi => (Action::CycleDpiPresets, Action::CycleDpiPresets),
-            Self::Zoom => (Action::ZoomOut, Action::ZoomIn),
+            // MX Master 3 thumb-wheel zoom feels natural with the same physical
+            // direction as the user's inverted scroll setting: backward/down
+            // zooms in, forward/up zooms out.
+            Self::Zoom => (Action::ZoomIn, Action::ZoomOut),
             Self::VerticalScroll => (Action::ScrollDown, Action::ScrollUp),
             Self::HorizontalScroll => (Action::HorizontalScrollLeft, Action::HorizontalScrollRight),
         };
@@ -127,7 +130,7 @@ mod tests {
             (Action::VolumeDown, Action::VolumeUp),
             (Action::VolumeUp, Action::VolumeDown),
             (Action::CycleDpiPresets, Action::CycleDpiPresets),
-            (Action::ZoomOut, Action::ZoomIn),
+            (Action::ZoomIn, Action::ZoomOut),
             (Action::ScrollDown, Action::ScrollUp),
             (Action::HorizontalScrollLeft, Action::HorizontalScrollRight),
         ];
