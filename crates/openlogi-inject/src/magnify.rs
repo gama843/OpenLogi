@@ -25,28 +25,40 @@ pub fn post_magnification(amount: f64) {
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use core::ptr::NonNull;
     use std::sync::OnceLock;
     use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
     use std::time::Duration;
 
-    use objc2_application_services::AXUIElement;
-    use objc2_core_foundation::CFRetained;
-    use objc2_core_graphics::{CGEvent, CGEventField, CGEventTapLocation, CGEventType};
+    use objc2_core_graphics::{CGEvent, CGEventField, CGEventTapLocation, CGEventType, CGPoint};
 
     /// A new wheel movement inside this gap continues the same pinch gesture.
     const END_AFTER_IDLE: Duration = Duration::from_millis(80);
 
-    /// `NSEventTypeGesture`.
-    const GESTURE_EVENT: CGEventType = CGEventType(29);
-    /// `kIOHIDEventTypeZoom`.
-    const HID_ZOOM: i64 = 8;
-    /// Undocumented CoreGraphics field carrying the IOHID event subtype.
+    /// AppKit event types used by a real gesture stream.
+    const BEGIN_GESTURE_EVENT: CGEventType = CGEventType(19);
+    const END_GESTURE_EVENT: CGEventType = CGEventType(20);
+    const MAGNIFY_EVENT: CGEventType = CGEventType(30);
+
+    /// Private event payload copied from real AppKit gesture events.
+    const FIELD_EVENT_FAMILY: CGEventField = CGEventField(55);
+    const FIELD_GESTURE_FLAGS: CGEventField = CGEventField(59);
+    const FIELD_GESTURE_MAGIC: CGEventField = CGEventField(87);
+    const FIELD_GESTURE_KIND: CGEventField = CGEventField(101);
+    const FIELD_GESTURE_KIND_2: CGEventField = CGEventField(107);
     const FIELD_HID_TYPE: CGEventField = CGEventField(110);
-    /// Undocumented CoreGraphics field carrying the magnification delta.
     const FIELD_MAGNIFICATION: CGEventField = CGEventField(113);
-    /// Undocumented CoreGraphics field carrying `IOHIDEventPhaseBits`.
+    const FIELD_MAGNIFICATION_2: CGEventField = CGEventField(114);
+    const FIELD_MAGNIFICATION_3: CGEventField = CGEventField(116);
+    const FIELD_MAGNIFICATION_4: CGEventField = CGEventField(118);
+    const FIELD_GESTURE_SUBTYPE_1: CGEventField = CGEventField(115);
+    const FIELD_GESTURE_SUBTYPE_2: CGEventField = CGEventField(117);
     const FIELD_PHASE: CGEventField = CGEventField(132);
+
+    const NSEVENT_GESTURE_FAMILY: i64 = 29;
+    const HID_ZOOM: i64 = 8;
+    const HID_GESTURE_BEGIN: i64 = 61;
+    const HID_GESTURE_END: i64 = 62;
+    const GESTURE_MAGIC: i64 = 4_294_970_300;
 
     static MAGNIFY_SENDER: OnceLock<Sender<f64>> = OnceLock::new();
 
@@ -87,14 +99,15 @@ mod macos {
 
     fn run_worker(receiver: Receiver<f64>) {
         let mut active = false;
-        let mut target_pid: Option<i32> = None;
+        let mut location = CGPoint { x: 0.0, y: 0.0 };
         loop {
             if !active {
                 match receiver.recv() {
                     Ok(amount) => {
-                        target_pid = hovered_pid();
-                        post_event(0.0, GesturePhase::Began, target_pid);
-                        post_event(amount, GesturePhase::Changed, target_pid);
+                        location = pointer_location();
+                        post_gesture_boundary(true, location);
+                        post_magnify(0.0, GesturePhase::Began, location);
+                        post_magnify(amount, GesturePhase::Changed, location);
                         active = true;
                     }
                     Err(_) => break,
@@ -103,91 +116,88 @@ mod macos {
             }
 
             match receiver.recv_timeout(END_AFTER_IDLE) {
-                Ok(amount) => post_event(amount, GesturePhase::Changed, target_pid),
+                Ok(amount) => post_magnify(amount, GesturePhase::Changed, location),
                 Err(RecvTimeoutError::Timeout) => {
-                    post_event(0.0, GesturePhase::Ended, target_pid);
+                    post_magnify(0.0, GesturePhase::Ended, location);
+                    post_gesture_boundary(false, location);
                     active = false;
-                    target_pid = None;
                 }
                 Err(RecvTimeoutError::Disconnected) => {
-                    post_event(0.0, GesturePhase::Ended, target_pid);
+                    post_magnify(0.0, GesturePhase::Ended, location);
+                    post_gesture_boundary(false, location);
                     break;
                 }
             }
         }
     }
 
-    /// Resolve the application under the current pointer without activating it.
-    ///
-    /// Accessibility hit-testing follows the same screen point the user's mouse
-    /// is over and gives us the owning process. The PID is captured once when a
-    /// wheel gesture begins so every Began/Changed/Ended event in that gesture
-    /// stays on one target even if the pointer moves slightly while zooming.
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "macOS screen coordinates are small enough to round-trip through the AX API's f32 coordinates"
-    )]
-    #[expect(
-        unsafe_code,
-        reason = "objc2's AXUIElement hit-test methods expose Apple's C out-parameters as unsafe; all pointers are local, valid, and the copied element is immediately wrapped in CFRetained"
-    )]
-    fn hovered_pid() -> Option<i32> {
-        let pointer_event = CGEvent::new(None)?;
-        let location = CGEvent::location(Some(&pointer_event));
-
-        // SAFETY: `new_system_wide` returns a retained system accessibility
-        // object. The two out-pointers below point to live stack locals for the
-        // duration of the calls. `copy_element_at_position` follows Core
-        // Foundation's Create/Copy rule; wrapping the returned non-null pointer
-        // in `CFRetained` balances that ownership when it drops.
-        unsafe {
-            let system = AXUIElement::new_system_wide();
-            let mut raw_element: *const AXUIElement = core::ptr::null();
-            let hit_error = system.copy_element_at_position(
-                location.x as f32,
-                location.y as f32,
-                NonNull::from(&mut raw_element),
-            );
-            if hit_error.0 != 0 {
-                tracing::debug!(error = hit_error.0, "could not hit-test app under pointer for zoom");
-                return None;
-            }
-
-            let element_ptr = NonNull::new(raw_element.cast_mut())?;
-            let element = CFRetained::from_raw(element_ptr);
-            let mut pid = 0_i32;
-            let pid_error = element.pid(NonNull::from(&mut pid));
-            if pid_error.0 == 0 && pid > 0 {
-                Some(pid)
-            } else {
-                tracing::debug!(error = pid_error.0, "could not resolve hovered app PID for zoom");
-                None
-            }
-        }
+    /// Snapshot the pointer position when the wheel gesture begins. WindowServer
+    /// can then route the magnification like a mouse-wheel event: to the window
+    /// under this point, without activating it or changing keyboard focus.
+    fn pointer_location() -> CGPoint {
+        CGEvent::new(None).map_or(CGPoint { x: 0.0, y: 0.0 }, |event| {
+            CGEvent::location(Some(&event))
+        })
     }
 
-    fn post_event(amount: f64, phase: GesturePhase, target_pid: Option<i32>) {
+    fn post_gesture_boundary(begin: bool, location: CGPoint) {
+        let Some(event) = CGEvent::new(None) else {
+            tracing::warn!("CGEvent::new failed for gesture boundary");
+            return;
+        };
+
+        CGEvent::set_type(
+            Some(&event),
+            if begin {
+                BEGIN_GESTURE_EVENT
+            } else {
+                END_GESTURE_EVENT
+            },
+        );
+        CGEvent::set_location(Some(&event), location);
+        CGEvent::set_integer_value_field(Some(&event), FIELD_EVENT_FAMILY, NSEVENT_GESTURE_FAMILY);
+        CGEvent::set_integer_value_field(
+            Some(&event),
+            FIELD_HID_TYPE,
+            if begin {
+                HID_GESTURE_BEGIN
+            } else {
+                HID_GESTURE_END
+            },
+        );
+        CGEvent::set_integer_value_field(Some(&event), FIELD_GESTURE_SUBTYPE_1, 5);
+        CGEvent::set_integer_value_field(Some(&event), FIELD_GESTURE_SUBTYPE_2, 5);
+        CGEvent::set_integer_value_field(Some(&event), FIELD_GESTURE_MAGIC, GESTURE_MAGIC);
+        CGEvent::post(CGEventTapLocation::HIDEventTap, Some(&event));
+    }
+
+    fn post_magnify(amount: f64, phase: GesturePhase, location: CGPoint) {
         let Some(event) = CGEvent::new(None) else {
             tracing::warn!("CGEvent::new failed for magnification");
             return;
         };
 
-        CGEvent::set_type(Some(&event), GESTURE_EVENT);
+        // Type 30 is the AppKit magnify event that carries a screen location.
+        // Keeping the event global (rather than `post_to_pid`) lets WindowServer
+        // perform normal pointer-based routing while the focused app stays put.
+        CGEvent::set_type(Some(&event), MAGNIFY_EVENT);
+        CGEvent::set_location(Some(&event), location);
+        CGEvent::set_integer_value_field(Some(&event), FIELD_EVENT_FAMILY, NSEVENT_GESTURE_FAMILY);
+        CGEvent::set_integer_value_field(Some(&event), FIELD_GESTURE_FLAGS, 256);
+        CGEvent::set_integer_value_field(Some(&event), FIELD_GESTURE_MAGIC, GESTURE_MAGIC);
+        CGEvent::set_integer_value_field(Some(&event), FIELD_GESTURE_KIND, 4);
+        CGEvent::set_integer_value_field(Some(&event), FIELD_GESTURE_KIND_2, 4);
         CGEvent::set_integer_value_field(Some(&event), FIELD_HID_TYPE, HID_ZOOM);
         CGEvent::set_integer_value_field(Some(&event), FIELD_PHASE, phase.bits());
-        CGEvent::set_double_value_field(Some(&event), FIELD_MAGNIFICATION, amount);
-
-        // A global gesture event is routed to the focused application, unlike a
-        // mouse-wheel event, which WindowServer routes by pointer location.
-        // Posting directly to the app under the pointer reproduces the wheel's
-        // hover-targeting semantics without activating that app or changing the
-        // user's focused window. If AX hit-testing is unavailable, preserve the
-        // previous focused-app behavior as a fallback.
-        if let Some(pid) = target_pid {
-            CGEvent::post_to_pid(pid, Some(&event));
-        } else {
-            CGEvent::post(CGEventTapLocation::HIDEventTap, Some(&event));
+        for field in [
+            FIELD_MAGNIFICATION,
+            FIELD_MAGNIFICATION_2,
+            FIELD_MAGNIFICATION_3,
+            FIELD_MAGNIFICATION_4,
+        ] {
+            CGEvent::set_double_value_field(Some(&event), field, amount);
         }
+        CGEvent::post(CGEventTapLocation::HIDEventTap, Some(&event));
     }
 
     #[cfg(test)]
