@@ -29,7 +29,8 @@ mod macos {
     use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
     use std::time::Duration;
 
-    use objc2_core_graphics::{CGEvent, CGEventField, CGEventTapLocation, CGEventType, CGPoint};
+    use objc2_core_graphics::{CGEvent, CGEventField, CGEventTapLocation, CGEventType};
+    use objc2_foundation::NSPoint as CGPoint;
 
     /// A new wheel movement inside this gap continues the same pinch gesture.
     const END_AFTER_IDLE: Duration = Duration::from_millis(80);
