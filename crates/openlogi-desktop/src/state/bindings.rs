@@ -71,6 +71,14 @@ impl AppState {
             .current_record()
             .and_then(DeviceRecord::persistent_config_key)
             .map(str::to_string);
+        if matches!(preset, ThumbwheelPreset::Zoom) {
+            self.button_bindings
+                .insert(ButtonId::Thumbwheel, Action::None);
+            if let Some(key) = key.as_deref() {
+                self.config
+                    .set_binding(key, ButtonId::Thumbwheel, Binding::Single(Action::None));
+            }
+        }
         if !apply_thumbwheel_pair(
             &mut self.button_bindings,
             &mut self.config,

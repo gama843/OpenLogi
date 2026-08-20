@@ -260,6 +260,8 @@ fn persisted_action_variant_names_are_stable() {
         Action::RunShellCommand(String::new()),
         Action::Workflow(Vec::new()),
         Action::ShowActionsRing,
+        Action::ZoomOut,
+        Action::ZoomIn,
         Action::OpenApplication(
             ApplicationTarget::new("/Applications/OpenLogi.app", "OpenLogi")
                 .unwrap_or_else(|error| panic!("valid target failed: {error}")),
@@ -333,6 +335,8 @@ fn persisted_action_variant_names_are_stable() {
         "VolumeDown",
         "VolumeUp",
         "Workflow",
+        "ZoomIn",
+        "ZoomOut",
     ];
     expected.sort_unstable();
     assert_eq!(actual, expected);

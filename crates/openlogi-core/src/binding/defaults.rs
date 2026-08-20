@@ -7,11 +7,10 @@ use super::value::Binding;
 
 /// Sensible defaults for a fresh device so the panel isn't empty on first run.
 ///
-/// Thumbwheel / GestureButton defaults match what Logi Options+ ships for
-/// MX-line devices: thumb wheel click → App Exposé, gesture button →
-/// Mission Control. The thumb wheel isn't captured yet; the dedicated gesture button is
-/// (per-direction, see [`default_gesture_binding`]). The bindings persist
-/// regardless so the user only configures once.
+/// The thumb-wheel click is disabled by default so a rotation cannot
+/// accidentally trigger App Exposé. The dedicated gesture button keeps its
+/// Mission Control default (per-direction, see [`default_gesture_binding`]).
+/// The bindings persist regardless so the user only configures once.
 ///
 /// `GestureButton`'s entry here is vestigial: in the merged [`Binding`] model
 /// the gesture button defaults to [`Binding::Gesture`] (see
@@ -27,7 +26,6 @@ pub fn default_binding(button: ButtonId) -> Action {
         ButtonId::Back => Action::BrowserBack,
         ButtonId::Forward => Action::BrowserForward,
         ButtonId::DpiToggle => Action::CycleDpiPresets,
-        ButtonId::Thumbwheel => Action::AppExpose,
         // The thumb wheel scrolls horizontally by default: rotating it produces
         // continuous horizontal scroll, with "up" → right and "down" → left.
         // The wheel watcher renders these two actions as smooth, sensitivity-
@@ -40,7 +38,10 @@ pub fn default_binding(button: ButtonId) -> Action {
         // Keyboard keys stay on their native firmware function until the user
         // explicitly binds them; an unbound key is never diverted, so a
         // `None` default keeps the projection total without capturing anything.
-        ButtonId::KeySearch
+        // The thumb-wheel press shares that no-op default to prevent accidental
+        // App Exposé while rotating the side wheel.
+        ButtonId::Thumbwheel
+        | ButtonId::KeySearch
         | ButtonId::KeyDictation
         | ButtonId::KeyEmoji
         | ButtonId::KeyScreenCapture

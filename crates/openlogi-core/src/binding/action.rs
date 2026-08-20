@@ -178,6 +178,12 @@ pub enum Action {
     ShowActionsRing,
     /// Open an application, folder, filesystem path, or platform URL.
     OpenApplication(ApplicationTarget),
+    /// Decrease magnification from continuous thumb-wheel input. This is an
+    /// agent-side wheel action, hidden from the generic button picker.
+    ZoomOut,
+    /// Increase magnification from continuous thumb-wheel input. This is an
+    /// agent-side wheel action, hidden from the generic button picker.
+    ZoomIn,
 }
 
 /// One step in a [`Action::Workflow`]. A workflow is a `Vec<WorkflowStep>`
@@ -276,6 +282,8 @@ macro_rules! for_each_unit_action {
             ScrollDown "Scroll Down" Scroll ArrowDown,
             HorizontalScrollLeft "Scroll Left" Scroll ScrollLeft,
             HorizontalScrollRight "Scroll Right" Scroll ScrollRight,
+            ZoomOut "Zoom Out" Scroll Search not_pickable,
+            ZoomIn "Zoom In" Scroll Search not_pickable,
         }
     };
 }
