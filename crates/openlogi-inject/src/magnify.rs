@@ -284,11 +284,7 @@ mod macos {
                 }
                 if let Some(set_front) = set_front_process_fn() {
                     unsafe {
-                        set_front(
-                            self.previous_psn.as_ptr().cast(),
-                            0,
-                            K_CPS_NO_WINDOWS,
-                        );
+                        set_front(self.previous_psn.as_ptr().cast(), 0, K_CPS_NO_WINDOWS);
                     }
                 }
             }
@@ -391,9 +387,8 @@ mod macos {
 
             let mut record = event_record(target.window_id);
             record[FOCUS_MARKER_OFFSET] = 0x02;
-            let defocused = unsafe {
-                post_record(previous_psn.as_ptr().cast(), record.as_ptr()) == 0
-            };
+            let defocused =
+                unsafe { post_record(previous_psn.as_ptr().cast(), record.as_ptr()) == 0 };
             record[FOCUS_MARKER_OFFSET] = 0x01;
             let focused = unsafe { post_record(target_psn.as_ptr().cast(), record.as_ptr()) == 0 };
 
