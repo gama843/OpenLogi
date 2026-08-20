@@ -1,0 +1,185 @@
+name: Apply thumbwheel local defaults
+
+on:
+  push:
+    branches:
+      - feat/thumbwheel-native-zoom
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/thumbwheel-native-zoom
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Apply final local defaults
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, got {count}: {old!r}")
+              p.write_text(s.replace(old, new, 1))
+
+          # Make 18 the out-of-box sensitivity while preserving 14 as the
+          # native/1x scaling baseline, so sensitivity=18 keeps the hardware-
+          # tested stronger zoom feel instead of being renormalized back to 1x.
+          replace_once(
+              "crates/openlogi-core/src/config/settings.rs",
+              """    /// custom wheel action needs to fire. [`DEFAULT_THUMBWHEEL_SENSITIVITY`]\n    /// (the out-of-the-box value) means 1× scroll speed; the wheel is only\n    /// diverted from native scrolling once this leaves the default.\n""",
+              """    /// custom wheel action needs to fire, and the speed of native magnification\n    /// emitted by the Zoom thumb-wheel preset. [`THUMBWHEEL_SENSITIVITY_ONE_X`]\n    /// is the native 1× baseline; [`DEFAULT_THUMBWHEEL_SENSITIVITY`] is the\n    /// slightly stronger out-of-the-box value.\n""",
+          )
+          replace_once(
+              "crates/openlogi-core/src/config/settings.rs",
+              """/// Out-of-the-box [`AppSettings::thumbwheel_sensitivity`]. At this value the\n/// wheel's horizontal scroll runs at 1× and the wheel is left to scroll\n/// natively (no HID++ diversion) unless a binding diverges from its default.\npub const DEFAULT_THUMBWHEEL_SENSITIVITY: i32 = 14;\n""",
+              """/// Native 1× thumb-wheel sensitivity used as the scaling reference.\n/// This preserves the original hardware calibration even though the stronger\n/// out-of-the-box value below is now 18.\npub const THUMBWHEEL_SENSITIVITY_ONE_X: i32 = 14;\n/// Out-of-the-box [`AppSettings::thumbwheel_sensitivity`].\npub const DEFAULT_THUMBWHEEL_SENSITIVITY: i32 = 18;\n""",
+          )
+          replace_once(
+              "crates/openlogi-core/src/config/settings.rs",
+              """/// serde default for [`AppSettings::thumbwheel_sensitivity`]: keeps configs\n/// predating the field at the 1× default.\n""",
+              """/// serde default for [`AppSettings::thumbwheel_sensitivity`]: keeps configs\n/// predating the field at the out-of-the-box default.\n""",
+          )
+
+          replace_once(
+              "crates/openlogi-core/src/config.rs",
+              """    AppSettings, Appearance, AssetSourcePreference, CameraControls, DEFAULT_THUMBWHEEL_SENSITIVITY,\n    Lighting, MAX_THUMBWHEEL_SENSITIVITY, MIN_THUMBWHEEL_SENSITIVITY,\n""",
+              """    AppSettings, Appearance, AssetSourcePreference, CameraControls, DEFAULT_THUMBWHEEL_SENSITIVITY,\n    Lighting, MAX_THUMBWHEEL_SENSITIVITY, MIN_THUMBWHEEL_SENSITIVITY,\n    THUMBWHEEL_SENSITIVITY_ONE_X,\n""",
+          )
+
+          gesture = Path("crates/openlogi-agent-core/src/watchers/gesture.rs")
+          s = gesture.read_text()
+          if "DEFAULT_THUMBWHEEL_SENSITIVITY" not in s:
+              raise SystemExit("gesture.rs: expected scaling reference not found")
+          s = s.replace("DEFAULT_THUMBWHEEL_SENSITIVITY", "THUMBWHEEL_SENSITIVITY_ONE_X")
+          s = s.replace(
+              "/// One raw thumb-wheel increment at default sensitivity changes scale by 1%.",
+              "/// One raw thumb-wheel increment at the native 1× sensitivity changes scale by 1%.",
+          )
+          s = s.replace(
+              "/// sensitivity leaves the default (so we scale scroll ourselves) or a",
+              "/// sensitivity leaves the native 1× baseline (so we scale scroll ourselves) or a",
+          )
+          s = s.replace(
+              "fn multiplier_is_unity_at_default_sensitivity()",
+              "fn multiplier_is_unity_at_one_x_sensitivity()",
+          )
+          s = s.replace(
+              "fn magnification_is_one_percent_per_increment_at_default_sensitivity()",
+              "fn magnification_is_one_percent_per_increment_at_one_x_sensitivity()",
+          )
+          s = s.replace(
+              "// Threshold at default sensitivity is DEFAULT increments.",
+              "// Threshold at the 1× sensitivity is ONE_X increments.",
+          )
+          gesture.write_text(s)
+
+          # Disable thumb-wheel click by default. This prevents the physical
+          # side wheel from accidentally firing App Exposé while being rotated.
+          replace_once(
+              "crates/openlogi-core/src/binding/defaults.rs",
+              """/// Thumbwheel / GestureButton defaults match what Logi Options+ ships for\n/// MX-line devices: thumb wheel click → App Exposé, gesture button →\n/// Mission Control. The thumb wheel isn't captured yet; the dedicated gesture button is\n/// (per-direction, see [`default_gesture_binding`]). The bindings persist\n/// regardless so the user only configures once.\n""",
+              """/// The thumb-wheel click is disabled by default so a rotation cannot\n/// accidentally trigger App Exposé. The dedicated gesture button keeps its\n/// Mission Control default (per-direction, see [`default_gesture_binding`]).\n/// The bindings persist regardless so the user only configures once.\n""",
+          )
+          replace_once(
+              "crates/openlogi-core/src/binding/defaults.rs",
+              "        ButtonId::Thumbwheel => Action::AppExpose,\n",
+              "        ButtonId::Thumbwheel => Action::None,\n",
+          )
+
+          # Selecting the Zoom preset also pins the thumb-wheel click to None,
+          # so existing configs that explicitly carried the old AppExpose
+          # default cannot reintroduce the accidental window switcher.
+          replace_once(
+              "crates/openlogi-desktop/src/state/bindings.rs",
+              """        let key = self\n            .current_record()\n            .and_then(DeviceRecord::persistent_config_key)\n            .map(str::to_string);\n        if !apply_thumbwheel_pair(\n""",
+              """        let key = self\n            .current_record()\n            .and_then(DeviceRecord::persistent_config_key)\n            .map(str::to_string);\n        if matches!(preset, ThumbwheelPreset::Zoom) {\n            self.button_bindings\n                .insert(ButtonId::Thumbwheel, Action::None);\n            if let Some(key) = key.as_deref() {\n                self.config.set_binding(\n                    key,\n                    ButtonId::Thumbwheel,\n                    Binding::Single(Action::None),\n                );\n            }\n        }\n        if !apply_thumbwheel_pair(\n""",
+          )
+
+          replace_once(
+              "crates/openlogi-desktop/src/windows/settings/general.rs",
+              '                "Scales the thumb wheel\'s horizontal scroll speed and how readily custom wheel actions trigger."\n',
+              '                "Scales the thumb wheel\'s horizontal scroll speed, native zoom speed, and how readily custom wheel actions trigger."\n',
+          )
+
+          replace_once(
+              "docs/config.example.toml",
+              "thumbwheel_sensitivity = 14\n",
+              "thumbwheel_sensitivity = 18\n",
+          )
+          replace_once(
+              "docs/config.example.toml",
+              """[devices.\"receiver:aabbccdd:slot:1\".bindings]\nBack = \"BrowserBack\"\nForward = \"BrowserForward\"\n""",
+              """[devices.\"receiver:aabbccdd:slot:1\".bindings]\nBack = \"BrowserBack\"\nForward = \"BrowserForward\"\nThumbwheel = \"None\"\n""",
+          )
+
+          # Fold the zoom variants into the existing search-icon arm so Clippy
+          # does not flag duplicate match bodies.
+          picker = Path("crates/openlogi-desktop/src/features/mouse/picker.rs")
+          s = picker.read_text()
+          s = s.replace(
+              '        Action::Find => "action-icons/search.svg",\n',
+              '        Action::Find | Action::ZoomOut | Action::ZoomIn => "action-icons/search.svg",\n',
+              1,
+          )
+          s = s.replace(
+              '        Action::ZoomOut | Action::ZoomIn => "action-icons/search.svg",\n',
+              '',
+              1,
+          )
+          picker.write_text(s)
+
+          # Pin the new serialized variant names in the persistence contract.
+          tests = Path("crates/openlogi-core/src/binding/tests.rs")
+          s = tests.read_text()
+          if "Action::ZoomOut" not in s:
+              s = s.replace(
+                  "        Action::ShowActionsRing,\n",
+                  "        Action::ShowActionsRing,\n        Action::ZoomOut,\n        Action::ZoomIn,\n",
+                  1,
+              )
+              s = s.replace(
+                  '        "Workflow",\n',
+                  '        "Workflow",\n        "ZoomIn",\n        "ZoomOut",\n',
+                  1,
+              )
+          tests.write_text(s)
+
+          # Apply the exact rustfmt cleanup already reported by CI for the GUI
+          # timer fix; cargo fmt below handles any additional formatting.
+          main = Path("crates/openlogi-desktop/src/main.rs")
+          s = main.read_text()
+          s = s.replace(
+              """            let (camera_scan_tx, mut camera_scan_rx) =\n                tokio::sync::mpsc::unbounded_channel::<()>();\n""",
+              "            let (camera_scan_tx, mut camera_scan_rx) = tokio::sync::mpsc::unbounded_channel::<()>();\n",
+              1,
+          )
+          main.write_text(s)
+          PY
+
+          cargo fmt --all
+
+          # One-shot helper: remove this workflow from the resulting tree so
+          # the PR contains only the actual product changes.
+          rm .github/workflows/apply-thumbwheel-local-defaults.yml
+
+      - name: Commit final defaults
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(macos): finalize thumbwheel zoom defaults"
+          git push origin HEAD:feat/thumbwheel-native-zoom
