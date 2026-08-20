@@ -128,9 +128,10 @@ pub struct AppSettings {
     /// Thumb-wheel responsiveness, on a [`MIN_THUMBWHEEL_SENSITIVITY`]–
     /// [`MAX_THUMBWHEEL_SENSITIVITY`] scale. It scales both the speed of the
     /// wheel's continuous horizontal scroll and how few rotation increments a
-    /// custom wheel action needs to fire. [`DEFAULT_THUMBWHEEL_SENSITIVITY`]
-    /// (the out-of-the-box value) means 1× scroll speed; the wheel is only
-    /// diverted from native scrolling once this leaves the default.
+    /// custom wheel action needs to fire, and the speed of native magnification
+    /// emitted by the Zoom thumb-wheel preset. [`THUMBWHEEL_SENSITIVITY_ONE_X`]
+    /// is the native 1× baseline; [`DEFAULT_THUMBWHEEL_SENSITIVITY`] is the
+    /// slightly stronger out-of-the-box value.
     #[serde(
         default = "default_thumbwheel_sensitivity",
         deserialize_with = "deserialize_thumbwheel_sensitivity"
@@ -154,10 +155,12 @@ pub struct AppSettings {
     pub ui_radius: Option<u8>,
 }
 
-/// Out-of-the-box [`AppSettings::thumbwheel_sensitivity`]. At this value the
-/// wheel's horizontal scroll runs at 1× and the wheel is left to scroll
-/// natively (no HID++ diversion) unless a binding diverges from its default.
-pub const DEFAULT_THUMBWHEEL_SENSITIVITY: i32 = 14;
+/// Native 1× thumb-wheel sensitivity used as the scaling reference.
+/// This preserves the original hardware calibration even though the stronger
+/// out-of-the-box value below is now 18.
+pub const THUMBWHEEL_SENSITIVITY_ONE_X: i32 = 14;
+/// Out-of-the-box [`AppSettings::thumbwheel_sensitivity`].
+pub const DEFAULT_THUMBWHEEL_SENSITIVITY: i32 = 18;
 /// Lowest selectable [`AppSettings::thumbwheel_sensitivity`].
 pub const MIN_THUMBWHEEL_SENSITIVITY: i32 = 1;
 /// Highest selectable [`AppSettings::thumbwheel_sensitivity`].
@@ -208,7 +211,7 @@ fn default_true() -> bool {
 }
 
 /// serde default for [`AppSettings::thumbwheel_sensitivity`]: keeps configs
-/// predating the field at the 1× default.
+/// predating the field at the out-of-the-box default.
 const fn default_thumbwheel_sensitivity() -> i32 {
     DEFAULT_THUMBWHEEL_SENSITIVITY
 }

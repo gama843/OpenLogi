@@ -11,7 +11,7 @@ capture_mouse_events = true
 auto_download_assets = true
 asset_source = "automatic"
 language = "en"
-thumbwheel_sensitivity = 14
+thumbwheel_sensitivity = 18
 appearance = "system"
 
 [devices."receiver:aabbccdd:slot:1"]
@@ -24,6 +24,7 @@ scroll_resolution = "high"
 [devices."receiver:aabbccdd:slot:1".bindings]
 Back = "BrowserBack"
 Forward = "BrowserForward"
+Thumbwheel = "None"
 
 [devices."receiver:aabbccdd:slot:1".bindings.GestureButton]
 Click = "MissionControl"

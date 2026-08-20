@@ -518,7 +518,7 @@ pub(crate) fn action_icon_path(action: &Action) -> &'static str {
         Action::Undo => "action-icons/undo-2.svg",
         Action::Redo => "action-icons/redo-2.svg",
         Action::SelectAll | Action::Workflow(_) => "action-icons/list-checks.svg",
-        Action::Find => "action-icons/search.svg",
+        Action::Find | Action::ZoomOut | Action::ZoomIn => "action-icons/search.svg",
         Action::Save => "action-icons/save.svg",
         Action::BrowserBack => "action-icons/arrow-left.svg",
         Action::BrowserForward => "action-icons/arrow-right.svg",
@@ -549,7 +549,6 @@ pub(crate) fn action_icon_path(action: &Action) -> &'static str {
         Action::ScrollDown => "action-icons/chevrons-down.svg",
         Action::HorizontalScrollLeft => "action-icons/chevrons-left.svg",
         Action::HorizontalScrollRight => "action-icons/chevrons-right.svg",
-        Action::ZoomOut | Action::ZoomIn => "action-icons/search.svg",
         // Power-user actions (M1 function-key remapper). TypeText shares the
         // keyboard glyph with CustomShortcut; shell/script arms share terminal.
         Action::CustomShortcut(_) | Action::TypeText(_) => "action-icons/keyboard.svg",

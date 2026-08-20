@@ -470,8 +470,7 @@ fn main() -> Result<()> {
             // here panics at runtime with "there is no reactor running" on macOS.
             // Drive the periodic camera scan from GPUI's own scheduler and feed
             // ticks back through a runtime-agnostic Tokio sync channel.
-            let (camera_scan_tx, mut camera_scan_rx) =
-                tokio::sync::mpsc::unbounded_channel::<()>();
+            let (camera_scan_tx, mut camera_scan_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
             let camera_timer = cx.background_executor().clone();
             let camera_clock = camera_timer.clone();
             camera_timer

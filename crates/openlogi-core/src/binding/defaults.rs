@@ -7,11 +7,10 @@ use super::value::Binding;
 
 /// Sensible defaults for a fresh device so the panel isn't empty on first run.
 ///
-/// Thumbwheel / GestureButton defaults match what Logi Options+ ships for
-/// MX-line devices: thumb wheel click → App Exposé, gesture button →
-/// Mission Control. The thumb wheel isn't captured yet; the dedicated gesture button is
-/// (per-direction, see [`default_gesture_binding`]). The bindings persist
-/// regardless so the user only configures once.
+/// The thumb-wheel click is disabled by default so a rotation cannot
+/// accidentally trigger App Exposé. The dedicated gesture button keeps its
+/// Mission Control default (per-direction, see [`default_gesture_binding`]).
+/// The bindings persist regardless so the user only configures once.
 ///
 /// `GestureButton`'s entry here is vestigial: in the merged [`Binding`] model
 /// the gesture button defaults to [`Binding::Gesture`] (see
@@ -27,7 +26,7 @@ pub fn default_binding(button: ButtonId) -> Action {
         ButtonId::Back => Action::BrowserBack,
         ButtonId::Forward => Action::BrowserForward,
         ButtonId::DpiToggle => Action::CycleDpiPresets,
-        ButtonId::Thumbwheel => Action::AppExpose,
+        ButtonId::Thumbwheel => Action::None,
         // The thumb wheel scrolls horizontally by default: rotating it produces
         // continuous horizontal scroll, with "up" → right and "down" → left.
         // The wheel watcher renders these two actions as smooth, sensitivity-

@@ -17,7 +17,7 @@ pub(super) fn general_page(sensitivity_slider: Entity<SliderState>) -> SettingPa
                 }),
             )
             .description(tr!(
-                "Scales the thumb wheel's horizontal scroll speed and how readily custom wheel actions trigger."
+                "Scales the thumb wheel's horizontal scroll speed, native zoom speed, and how readily custom wheel actions trigger."
             )),
         )
         .item(

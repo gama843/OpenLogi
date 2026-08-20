@@ -28,7 +28,7 @@ pub use settings::{
     AppSettings, Appearance, AssetSourcePreference, CameraControls, DEFAULT_THUMBWHEEL_SENSITIVITY,
     Lighting, MAX_THUMBWHEEL_SENSITIVITY, MIN_THUMBWHEEL_SENSITIVITY,
     SMARTSHIFT_AUTO_DISENGAGE_DEFAULT, SMARTSHIFT_MIN_AUTO_DISENGAGE, ScrollResolution, SmartShift,
-    WheelMode, clamp_thumbwheel_sensitivity,
+    THUMBWHEEL_SENSITIVITY_ONE_X, WheelMode, clamp_thumbwheel_sensitivity,
 };
 
 use crate::binding::{

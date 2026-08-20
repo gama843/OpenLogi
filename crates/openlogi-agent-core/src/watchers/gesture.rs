@@ -25,7 +25,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use openlogi_core::binding::{Action, ButtonId, default_binding};
-use openlogi_core::config::DEFAULT_THUMBWHEEL_SENSITIVITY;
+use openlogi_core::config::THUMBWHEEL_SENSITIVITY_ONE_X;
 use openlogi_hid::gesture::{CaptureSpec, GESTURE_SOURCE_BUTTONS};
 use openlogi_hid::{CaptureChannel, CapturedInput, DeviceRoute, run_capture_session};
 use tokio::sync::{mpsc, oneshot};
@@ -48,7 +48,7 @@ const ACTION_DECAY: Duration = Duration::from_millis(300);
 /// deliberate flick triggers once instead of repeating across a fast spin.
 const ACTION_COOLDOWN: Duration = Duration::from_millis(200);
 
-/// One raw thumb-wheel increment at default sensitivity changes scale by 1%.
+/// One raw thumb-wheel increment at the native 1× sensitivity changes scale by 1%.
 const MAGNIFICATION_PER_INCREMENT: f64 = 0.01;
 
 /// Speed multiplier for the wheel's continuous horizontal scroll. The default
@@ -58,19 +58,19 @@ const MAGNIFICATION_PER_INCREMENT: f64 = 0.01;
     reason = "sensitivity is a small 1..=100 integer — exact in f32"
 )]
 fn scroll_multiplier(sensitivity: i32) -> f32 {
-    sensitivity as f32 / DEFAULT_THUMBWHEEL_SENSITIVITY as f32
+    sensitivity as f32 / THUMBWHEEL_SENSITIVITY_ONE_X as f32
 }
 
 /// Fractional native magnification emitted for one raw rotation increment.
 /// Uses the same linear sensitivity scale as horizontal thumb-wheel scrolling.
 fn magnification_per_increment(sensitivity: i32) -> f64 {
-    f64::from(sensitivity) / f64::from(DEFAULT_THUMBWHEEL_SENSITIVITY) * MAGNIFICATION_PER_INCREMENT
+    f64::from(sensitivity) / f64::from(THUMBWHEEL_SENSITIVITY_ONE_X) * MAGNIFICATION_PER_INCREMENT
 }
 
 /// Rotation increments required to fire a custom (non-scroll) wheel action.
 /// Higher sensitivity → fewer increments; always at least one.
 fn action_threshold(sensitivity: i32) -> i32 {
-    (2 * DEFAULT_THUMBWHEEL_SENSITIVITY - sensitivity).max(1)
+    (2 * THUMBWHEEL_SENSITIVITY_ONE_X - sensitivity).max(1)
 }
 
 /// Spawn the capture-manager thread. It owns a current-thread tokio runtime that
@@ -107,7 +107,7 @@ pub fn spawn(
 /// tap: its sensitivity leaves the default (so we scale scroll ourselves) or a
 /// thumbwheel binding does.
 fn thumbwheel_armed(plan: &DeviceCapturePlan) -> bool {
-    plan.thumbwheel_sensitivity != DEFAULT_THUMBWHEEL_SENSITIVITY
+    plan.thumbwheel_sensitivity != THUMBWHEEL_SENSITIVITY_ONE_X
         || plan.thumbwheel_bindings_nondefault
 }
 
@@ -547,29 +547,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn multiplier_is_unity_at_default_sensitivity() {
-        assert!((scroll_multiplier(DEFAULT_THUMBWHEEL_SENSITIVITY) - 1.0).abs() < f32::EPSILON);
-        assert!(scroll_multiplier(DEFAULT_THUMBWHEEL_SENSITIVITY * 2) > 1.9);
+    fn multiplier_is_unity_at_one_x_sensitivity() {
+        assert!((scroll_multiplier(THUMBWHEEL_SENSITIVITY_ONE_X) - 1.0).abs() < f32::EPSILON);
+        assert!(scroll_multiplier(THUMBWHEEL_SENSITIVITY_ONE_X * 2) > 1.9);
         assert!(scroll_multiplier(1) < 0.1);
     }
 
     #[test]
-    fn magnification_is_one_percent_per_increment_at_default_sensitivity() {
+    fn magnification_is_one_percent_per_increment_at_one_x_sensitivity() {
         assert!(
-            (magnification_per_increment(DEFAULT_THUMBWHEEL_SENSITIVITY) - 0.01).abs()
-                < f64::EPSILON
+            (magnification_per_increment(THUMBWHEEL_SENSITIVITY_ONE_X) - 0.01).abs() < f64::EPSILON
         );
-        assert!(magnification_per_increment(DEFAULT_THUMBWHEEL_SENSITIVITY * 2) > 0.019);
+        assert!(magnification_per_increment(THUMBWHEEL_SENSITIVITY_ONE_X * 2) > 0.019);
     }
 
     #[test]
     fn action_threshold_drops_with_sensitivity_and_floors_at_one() {
         assert_eq!(
-            action_threshold(DEFAULT_THUMBWHEEL_SENSITIVITY),
-            DEFAULT_THUMBWHEEL_SENSITIVITY
+            action_threshold(THUMBWHEEL_SENSITIVITY_ONE_X),
+            THUMBWHEEL_SENSITIVITY_ONE_X
         );
         assert!(
-            action_threshold(1) > action_threshold(DEFAULT_THUMBWHEEL_SENSITIVITY),
+            action_threshold(1) > action_threshold(THUMBWHEEL_SENSITIVITY_ONE_X),
             "low sensitivity needs more increments"
         );
         assert_eq!(action_threshold(100), 1, "high sensitivity floors at one");
@@ -580,7 +579,7 @@ mod tests {
         let mut dir = WheelDirection::default();
         let now = Instant::now();
         // multiplier 0.5: two increments make one whole line.
-        let half = DEFAULT_THUMBWHEEL_SENSITIVITY / 2;
+        let half = THUMBWHEEL_SENSITIVITY_ONE_X / 2;
         assert_eq!(
             advance(&mut dir, &Action::HorizontalScrollRight, 1, half, now),
             WheelOutput::Idle
@@ -600,7 +599,7 @@ mod tests {
                 &mut dir,
                 &Action::HorizontalScrollLeft,
                 1,
-                DEFAULT_THUMBWHEEL_SENSITIVITY,
+                THUMBWHEEL_SENSITIVITY_ONE_X,
                 now
             ),
             WheelOutput::Scroll(-1)
@@ -613,7 +612,7 @@ mod tests {
         let mut up = WheelDirection::default();
         let mut down = WheelDirection::default();
         let now = Instant::now();
-        let half = DEFAULT_THUMBWHEEL_SENSITIVITY / 2; // multiplier 0.5
+        let half = THUMBWHEEL_SENSITIVITY_ONE_X / 2; // multiplier 0.5
         assert_eq!(
             advance(&mut up, &Action::HorizontalScrollRight, 1, half, now),
             WheelOutput::Idle
@@ -634,14 +633,14 @@ mod tests {
     fn custom_action_fires_on_threshold_then_respects_cooldown() {
         let mut dir = WheelDirection::default();
         let now = Instant::now();
-        // Threshold at default sensitivity is DEFAULT increments.
-        for _ in 0..DEFAULT_THUMBWHEEL_SENSITIVITY - 1 {
+        // Threshold at the 1× sensitivity is ONE_X increments.
+        for _ in 0..THUMBWHEEL_SENSITIVITY_ONE_X - 1 {
             assert_eq!(
                 advance(
                     &mut dir,
                     &Action::VolumeUp,
                     1,
-                    DEFAULT_THUMBWHEEL_SENSITIVITY,
+                    THUMBWHEEL_SENSITIVITY_ONE_X,
                     now
                 ),
                 WheelOutput::Idle
@@ -652,19 +651,19 @@ mod tests {
                 &mut dir,
                 &Action::VolumeUp,
                 1,
-                DEFAULT_THUMBWHEEL_SENSITIVITY,
+                THUMBWHEEL_SENSITIVITY_ONE_X,
                 now
             ),
             WheelOutput::FireAction
         );
         // Immediately after, the cooldown swallows further increments.
-        for _ in 0..DEFAULT_THUMBWHEEL_SENSITIVITY {
+        for _ in 0..THUMBWHEEL_SENSITIVITY_ONE_X {
             assert_eq!(
                 advance(
                     &mut dir,
                     &Action::VolumeUp,
                     1,
-                    DEFAULT_THUMBWHEEL_SENSITIVITY,
+                    THUMBWHEEL_SENSITIVITY_ONE_X,
                     now
                 ),
                 WheelOutput::Idle
@@ -680,7 +679,7 @@ mod tests {
                 &mut dir,
                 &Action::None,
                 5,
-                DEFAULT_THUMBWHEEL_SENSITIVITY,
+                THUMBWHEEL_SENSITIVITY_ONE_X,
                 Instant::now()
             ),
             WheelOutput::Idle
