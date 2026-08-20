@@ -25,10 +25,13 @@ pub fn post_magnification(amount: f64) {
 
 #[cfg(target_os = "macos")]
 mod macos {
+    use core::ptr::NonNull;
     use std::sync::OnceLock;
     use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
     use std::time::Duration;
 
+    use objc2_application_services::AXUIElement;
+    use objc2_core_foundation::CFRetained;
     use objc2_core_graphics::{CGEvent, CGEventField, CGEventTapLocation, CGEventType};
 
     /// A new wheel movement inside this gap continues the same pinch gesture.
@@ -84,12 +87,14 @@ mod macos {
 
     fn run_worker(receiver: Receiver<f64>) {
         let mut active = false;
+        let mut target_pid: Option<i32> = None;
         loop {
             if !active {
                 match receiver.recv() {
                     Ok(amount) => {
-                        post_event(0.0, GesturePhase::Began);
-                        post_event(amount, GesturePhase::Changed);
+                        target_pid = hovered_pid();
+                        post_event(0.0, GesturePhase::Began, target_pid);
+                        post_event(amount, GesturePhase::Changed, target_pid);
                         active = true;
                     }
                     Err(_) => break,
@@ -98,20 +103,70 @@ mod macos {
             }
 
             match receiver.recv_timeout(END_AFTER_IDLE) {
-                Ok(amount) => post_event(amount, GesturePhase::Changed),
+                Ok(amount) => post_event(amount, GesturePhase::Changed, target_pid),
                 Err(RecvTimeoutError::Timeout) => {
-                    post_event(0.0, GesturePhase::Ended);
+                    post_event(0.0, GesturePhase::Ended, target_pid);
                     active = false;
+                    target_pid = None;
                 }
                 Err(RecvTimeoutError::Disconnected) => {
-                    post_event(0.0, GesturePhase::Ended);
+                    post_event(0.0, GesturePhase::Ended, target_pid);
                     break;
                 }
             }
         }
     }
 
-    fn post_event(amount: f64, phase: GesturePhase) {
+    /// Resolve the application under the current pointer without activating it.
+    ///
+    /// Accessibility hit-testing follows the same screen point the user's mouse
+    /// is over and gives us the owning process. The PID is captured once when a
+    /// wheel gesture begins so every Began/Changed/Ended event in that gesture
+    /// stays on one target even if the pointer moves slightly while zooming.
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "macOS screen coordinates are small enough to round-trip through the AX API's f32 coordinates"
+    )]
+    #[expect(
+        unsafe_code,
+        reason = "objc2's AXUIElement hit-test methods expose Apple's C out-parameters as unsafe; all pointers are local, valid, and the copied element is immediately wrapped in CFRetained"
+    )]
+    fn hovered_pid() -> Option<i32> {
+        let pointer_event = CGEvent::new(None)?;
+        let location = CGEvent::location(Some(&pointer_event));
+
+        // SAFETY: `new_system_wide` returns a retained system accessibility
+        // object. The two out-pointers below point to live stack locals for the
+        // duration of the calls. `copy_element_at_position` follows Core
+        // Foundation's Create/Copy rule; wrapping the returned non-null pointer
+        // in `CFRetained` balances that ownership when it drops.
+        unsafe {
+            let system = AXUIElement::new_system_wide();
+            let mut raw_element: *const AXUIElement = core::ptr::null();
+            let hit_error = system.copy_element_at_position(
+                location.x as f32,
+                location.y as f32,
+                NonNull::from(&mut raw_element),
+            );
+            if hit_error.0 != 0 {
+                tracing::debug!(error = hit_error.0, "could not hit-test app under pointer for zoom");
+                return None;
+            }
+
+            let element_ptr = NonNull::new(raw_element.cast_mut())?;
+            let element = CFRetained::from_raw(element_ptr);
+            let mut pid = 0_i32;
+            let pid_error = element.pid(NonNull::from(&mut pid));
+            if pid_error.0 == 0 && pid > 0 {
+                Some(pid)
+            } else {
+                tracing::debug!(error = pid_error.0, "could not resolve hovered app PID for zoom");
+                None
+            }
+        }
+    }
+
+    fn post_event(amount: f64, phase: GesturePhase, target_pid: Option<i32>) {
         let Some(event) = CGEvent::new(None) else {
             tracing::warn!("CGEvent::new failed for magnification");
             return;
@@ -121,7 +176,18 @@ mod macos {
         CGEvent::set_integer_value_field(Some(&event), FIELD_HID_TYPE, HID_ZOOM);
         CGEvent::set_integer_value_field(Some(&event), FIELD_PHASE, phase.bits());
         CGEvent::set_double_value_field(Some(&event), FIELD_MAGNIFICATION, amount);
-        CGEvent::post(CGEventTapLocation::HIDEventTap, Some(&event));
+
+        // A global gesture event is routed to the focused application, unlike a
+        // mouse-wheel event, which WindowServer routes by pointer location.
+        // Posting directly to the app under the pointer reproduces the wheel's
+        // hover-targeting semantics without activating that app or changing the
+        // user's focused window. If AX hit-testing is unavailable, preserve the
+        // previous focused-app behavior as a fallback.
+        if let Some(pid) = target_pid {
+            CGEvent::post_to_pid(pid, Some(&event));
+        } else {
+            CGEvent::post(CGEventTapLocation::HIDEventTap, Some(&event));
+        }
     }
 
     #[cfg(test)]
