@@ -24,7 +24,11 @@ scroll_resolution = "high"
 [devices."receiver:aabbccdd:slot:1".bindings]
 Back = "BrowserBack"
 Forward = "BrowserForward"
+# Native macOS magnification on the side wheel. Disable the wheel press so a
+# rotation cannot accidentally trigger App Exposé.
 Thumbwheel = "None"
+ThumbwheelScrollUp = "ZoomOut"
+ThumbwheelScrollDown = "ZoomIn"
 
 [devices."receiver:aabbccdd:slot:1".bindings.GestureButton]
 Click = "MissionControl"
